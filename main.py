@@ -13,6 +13,7 @@ import hashlib
 import inspect
 import re
 from yapf import yapf_api
+from itertools import tee
 
 def cleansource(source):
 
@@ -31,6 +32,7 @@ def cleansource(source):
 
 
     print(len(source.split('\n')), len(source))
+    
     return source
 
 
@@ -61,7 +63,6 @@ class savior:
         self.filepath = at
         self.storage = {}
         self.idkey = idkey
-        self.hkey = hkey
         self.fuid = -1
 
     def question(self, f):
@@ -82,6 +83,56 @@ class savior:
                 result = self.storage.get(item) or f(item)
                 self.store(item, result)
                 yield result
+
+    def __call__(self, f):
+        return self.batchwrap(f)
+
+    def batchwrap(self, f):
+        
+        def wrapper(items, **kw):
+
+            # a, b = tee(items)
+
+            # with self:
+            #     self.question(f)
+            #     for item, result in zip(
+            #         a,
+            #         f(b, **kw)
+            #     ):
+            #         result = self.storage.get(item) or f(item)
+            #         self.store(item, result)
+            #         yield result
+
+            sentinel = object()
+
+            with self:
+
+                self.question(f)
+
+                mogadicio = (
+                    (item, self.storage.get(item, sentinel))
+                    for item in items
+                )
+
+                mogadicio, mogadicia = tee(mogadicio)
+
+                parallel = f(
+                    print('mogadicia:', item) or item[0]
+                    for item in mogadicia
+                    if item[1] is sentinel
+                )
+
+                for m in mogadicio:
+                    item, result = m
+                    if result is sentinel:
+                        result = next(parallel)
+                    # do it then
+                    self.store(item, result)
+                    yield result
+
+        return wrapper
+                    
+
 
     def filter(
         self,
