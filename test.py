@@ -4,8 +4,8 @@ from tqdm import tqdm
 
 
 def translate(d):
-
-    if d is None:
+    
+    if d is None or 0:
         raise ValueError
 
     time.sleep(.5)
