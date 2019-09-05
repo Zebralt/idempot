@@ -1,26 +1,22 @@
-"""
-Make a batch process idempotent.
-
- keys => values (bijective)
-
- f ( *values )  
-
-"""
 
 import os
 import pickle
 import hashlib
 import inspect
 import re
-from yapf import yapf_api
 from itertools import tee
 
+from yapf import yapf_api
+
+
 def cleansource(source):
+    """
+    Auto-format w/ yapf and clean a Python function 's source code.
+    """
 
     # Remove single line comments
-    # right-
-    source,_ = yapf_api.FormatCode(source)
-    
+    source, _ = yapf_api.FormatCode(source)
+
     # Remove # comments
     source = re.sub(r'\s*#.*\n', '\n', source)
     # Remove triple quotes comments
@@ -28,17 +24,18 @@ def cleansource(source):
     # Remove trailing whitespace
     source = re.sub(r'\s+$', '\n', source)
     # Remove empty lines
-    source = re.sub('\n\s*\n', '\n', source)
+    source = re.sub(r'\n\s*\n', '\n', source)
 
-
-    print(len(source.split('\n')), len(source))
-    
     return source
 
 
 def funcsum(f):
+    """
+    Compute a checksum of the source code of a function.
+    """
+
     h = hashlib.sha384()
-    
+
     try:
         h.update(
             cleansource(inspect.getsource(f)).encode('utf-8')
@@ -46,19 +43,22 @@ def funcsum(f):
     except TypeError as te:
         print(te)
         h.update(f.__name__.encode('utf-8'))
-    
-    v = h.hexdigest()
-    print(v)
-    return v
+
+    return h.hexdigest()
 
 
 class savior:
 
+    """
+    An interface object used to make a batch process idempotent.
+    This will save the output elements and keep track of those who
+    have been already processed, skipping them at next runtime.
+    """
+
     def __init__(
-        self, 
-        at: str, 
-        idkey: callable = hash,
-        hkey:callable = None, 
+        self,
+        at: str,  # The saving point (a filepath)
+        idkey: callable = hash,  # The function used to uniquely identify the input value
     ):
         self.filepath = at
         self.storage = {}
@@ -77,6 +77,9 @@ class savior:
         f,
         iterable
     ):
+        """
+        Call a map object wrapped backed by the current object.
+        """
         with self:
             self.question(f)
             for item in iterable:
@@ -85,23 +88,12 @@ class savior:
                 yield result
 
     def __call__(self, f):
+        """Wraps a function in idempotency."""
         return self.batchwrap(f)
 
     def batchwrap(self, f):
-        
+        """Wraps a function in idempotency."""
         def wrapper(items, **kw):
-
-            # a, b = tee(items)
-
-            # with self:
-            #     self.question(f)
-            #     for item, result in zip(
-            #         a,
-            #         f(b, **kw)
-            #     ):
-            #         result = self.storage.get(item) or f(item)
-            #         self.store(item, result)
-            #         yield result
 
             sentinel = object()
 
@@ -117,7 +109,7 @@ class savior:
                 mogadicio, mogadicia = tee(mogadicio)
 
                 parallel = f(
-                    print('mogadicia:', item) or item[0]
+                    item[0]
                     for item in mogadicia
                     if item[1] is sentinel
                 )
@@ -131,8 +123,6 @@ class savior:
                     yield result
 
         return wrapper
-                    
-
 
     def filter(
         self,
@@ -147,11 +137,6 @@ class savior:
                 if result:
                     yield item
 
-    # def batchwrap(
-    #     self,
-    #     f
-    # ):
-
     def load(self):
         self.storage = {}
         if os.path.exists(self.filepath):
@@ -159,7 +144,6 @@ class savior:
                 self.fuid, self.storage = pickle.load(f)
 
     def save(self):
-        # yaml.dump(self.storage, open(self.filepath, 'w+'))
         self.storage = self.fuid, self.storage
         pickle.dump(self.storage, open(self.filepath, 'wb+'))
 
@@ -170,39 +154,5 @@ class savior:
     def __exit__(self, *a):
         self.save()
 
-
     def store(self, input, output):
-        # print(input, '=>', output)
         self.storage[input] = output
-
-
-def test_idempotency():
-
-    # Let's say I want to translate 1k elements;
-
-    texts = ["I"] * 20 + ["A"] + ["I"] * 20
-
-    # I want to make the process idempotent, that is,
-    # 
-
-    def translate(d):
-        if d == "A":
-            raise Exception
-        return "E"
-    
-    translations = map(translate, texts)
-
-    # Oups! One the items wasn't translated properly and raised an exception.
-    # Where have the successful translations up to exception time found ?
-
-    # automatically hash out and checksum the function
-    translations = savior(at='backup.pkg').map(translate, texts)
-    translations = savior(at='backup.pkg')(batch_translate)(texts)  # align
-    # defaults:
-    # name => numerated default (backup1, backup2, backup3, etc. created  as temp files)
-    # idkey => hash
-    
-    translations = map(translate, texts)
-    translations = savior('name').iter(translations)  # +^ this is nonsensical; the operation still need to be done and we can't access the input of each transaction
-
-    *translations,
