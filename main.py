@@ -4,34 +4,42 @@ import pickle
 import hashlib
 import inspect
 import re
+from typing import Iterator
+from functools import wraps, partial
 from itertools import tee
 
 from yapf import yapf_api
 
 
-def cleansource(source):
+def cleansource(source: str) -> str:
     """
     Auto-format w/ yapf and clean a Python function 's source code.
+    Do away with whitespace, empty lines and comments. (docstrings + single-line)
     """
 
-    # Remove single line comments
+    # Format code with yapf
     source, _ = yapf_api.FormatCode(source)
 
     # Remove # comments
     source = re.sub(r'\s*#.*\n', '\n', source)
+
     # Remove triple quotes comments
     source = re.sub(r'\n\s*"""(.|\n|(\n\r))*?"""', '\n', source)
+    source = re.sub(r"\n\s*'''(.|\n|(\n\r))*?'''", '\n', source)
+
     # Remove trailing whitespace
     source = re.sub(r'\s+$', '\n', source)
+
     # Remove empty lines
     source = re.sub(r'\n\s*\n', '\n', source)
 
     return source
 
 
-def funcsum(f):
+def funcsum(f: callable) -> str:
     """
     Compute a checksum of the source code of a function.
+    The source code also includes both the function's prototype and decorators declarations.
     """
 
     h = hashlib.sha384()
@@ -74,9 +82,9 @@ class savior:
 
     def map(
         self,
-        f,
-        iterable
-    ):
+        f: callable,
+        iterable: Iterator
+    ) -> Iterator:
         """
         Call a map object wrapped backed by the current object.
         """
@@ -87,12 +95,14 @@ class savior:
                 self.store(item, result)
                 yield result
 
-    def __call__(self, f):
+    def __call__(self, f: callable) -> callable:
         """Wraps a function in idempotency."""
         return self.batchwrap(f)
 
-    def batchwrap(self, f):
+    def batchwrap(self, f: callable) -> callable:
         """Wraps a function in idempotency."""
+
+        @wraps(f)
         def wrapper(items, **kw):
 
             sentinel = object()
@@ -102,7 +112,10 @@ class savior:
                 self.question(f)
 
                 mogadicio = (
-                    (item, self.storage.get(item, sentinel))
+                    (
+                        item,
+                        self.storage.get(item, sentinel)
+                    )
                     for item in items
                 )
 
@@ -126,9 +139,9 @@ class savior:
 
     def filter(
         self,
-        f,
-        iterable
-    ):
+        f: callable,
+        iterable: Iterator
+    ) -> Iterator:
         with self:
             self.question(f)
             for item in iterable:
