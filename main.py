@@ -17,6 +17,18 @@ def cleansource(source: str) -> str:
     Do away with whitespace, empty lines and comments. (docstrings + single-line)
     """
 
+    first = source.split('\n')[0]
+    m = re.match('^\s+', first)
+    if m is not None:
+        x = m.group()
+        if len(x):
+            source = '\n'.join(
+                re.sub(r'^\s{%s}' % len(x), '', line)
+                for line in source.split('\n')
+            )
+
+    print(source)
+
     # Format code with yapf
     source, _ = yapf_api.FormatCode(source)
 
@@ -65,7 +77,7 @@ class savior:
 
     def __init__(
         self,
-        at: str,  # The saving point (a filepath)
+        at: str = None,  # The saving point (a filepath)
         idkey: callable = hash,  # The function used to uniquely identify the input value
     ):
         self.filepath = at
@@ -152,13 +164,14 @@ class savior:
 
     def load(self):
         self.storage = {}
-        if os.path.exists(self.filepath):
+        if self.filepath and os.path.exists(self.filepath):
             with open(self.filepath, 'rb') as f:
                 self.fuid, self.storage = pickle.load(f)
 
     def save(self):
-        self.storage = self.fuid, self.storage
-        pickle.dump(self.storage, open(self.filepath, 'wb+'))
+        if self.filepath:
+            self.storage = self.fuid, self.storage
+            pickle.dump(self.storage, open(self.filepath, 'wb+'))
 
     def __enter__(self):
         self.load()
